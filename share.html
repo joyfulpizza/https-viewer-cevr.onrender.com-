@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>화면 공유</title>
+</head>
+<body>
+
+<h2>화면 공유</h2>
+<button onclick="start()">공유 시작</button>
+<p>방 코드: <span id="room"></span></p>
+<video id="preview" autoplay muted></video>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const socket = io("https://YOUR-RENDER-URL");
+
+let peer;
+let roomId = Math.random().toString(36).substring(2, 8);
+
+document.getElementById("room").innerText = roomId;
+
+async function start() {
+  socket.emit("create-room", roomId);
+
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+  document.getElementById("preview").srcObject = stream;
+
+  peer = new RTCPeerConnection();
+
+  stream.getTracks().forEach(track => peer.addTrack(track, stream));
+
+  peer.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit("ice-candidate", { roomId, candidate: e.candidate });
+    }
+  };
+
+  socket.on("viewer-joined", async () => {
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    socket.emit("offer", { roomId, offer });
+  });
+
+  socket.on("answer", async (answer) => {
+    await peer.setRemoteDescription(answer);
+  });
+
+  socket.on("ice-candidate", async (candidate) => {
+    await peer.addIceCandidate(candidate);
+  });
+}
+</script>
+
+</body>
+</html>
